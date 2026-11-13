@@ -1,0 +1,68 @@
+# Levanta todo el sistema localmente:  docker compose up -d --build
+services:
+  postgres:
+    image: postgres:16
+    container_name: zonas-postgres
+    environment:
+      POSTGRES_DB: zonas_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "12345"
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d zonas_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: zonas-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"     # AMQP
+      - "15672:15672"   # Panel web: http://localhost:15672 (guest/guest)
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  modelo-ml:
+    build: ./seguridad
+    container_name: zonas-modelo-ml
+    ports:
+      - "8000:8000"     # http://localhost:8000/docs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.local
+    container_name: zonas-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      modelo-ml:
+        condition: service_started
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/zonas_db
+      DB_USERNAME: postgres
+      DB_PASSWORD: "12345"
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      MODELO_API_URL: http://modelo-ml:8000
+    ports:
+      - "8080:8080"     # http://localhost:8080/api/v1/zonas/
+
+volumes:
+  pgdata:

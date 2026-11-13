@@ -7,3 +7,7 @@ env/
 target/
 
 *.joblib
+
+levantar_log.txt
+subir_log.txt
+subir_cambios.bat
